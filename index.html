@@ -1040,34 +1040,54 @@ function renderInvTable(){
 
 function renderInvRows(){
   const visCols=invCols.filter(c=>c.visible);
-  document.getElementById('inv-tbody').innerHTML=invRows.map((row,ri)=>
-    '<tr>'+visCols.map(col=>{
+  document.getElementById('inv-tbody').innerHTML=invRows.map((row,ri)=>{
+    const resolved=resolveRow(row);
+    return '<tr>'+visCols.map(col=>{
       if(col.type==='formula'){
-        const v=calcFormula(col.formula,row);
+        const v=parseFloat(resolved[col.id])||0;
         return `<td class="calc">${v?fmtN(v):''}</td>`;
       }
       return `<td><input class="${col.type==='text'?'txt':''}" value="${row[col.id]||''}" oninput="updateInvRow(${ri},'${col.id}',this.value)" /></td>`;
     }).join('')+
-    `<td class="del-col"><button class="del-row-btn" onclick="removeInvRow(${ri})">×</button></td></tr>`
-  ).join('');
+    `<td class="del-col"><button class="del-row-btn" onclick="removeInvRow(${ri})">×</button></td></tr>`;
+  }).join('');
 }
 
+function resolveRow(row){
+  // Build a flat value map: for each formula col, compute its value first
+  const vals={...row};
+  if(typeof invCols!=='undefined'){
+    invCols.forEach(col=>{
+      if(col.type==='formula'&&col.formula){
+        try{
+          const f=col.formula.replace(/[a-zA-Z_][a-zA-Z0-9_]*/g,m=>parseFloat(vals[m])||0);
+          vals[col.id]=eval(f)||0;
+        }catch{vals[col.id]=0;}
+      }
+    });
+  }
+  return vals;
+}
 function calcFormula(formula,row){
   if(!formula)return 0;
-  try{const f=formula.replace(/[a-zA-Z_][a-zA-Z0-9_]*/g,m=>parseFloat(row[m])||0);return eval(f)||0;}catch{return 0}
+  try{
+    const vals=resolveRow(row);
+    const f=formula.replace(/[a-zA-Z_][a-zA-Z0-9_]*/g,m=>parseFloat(vals[m])||0);
+    return eval(f)||0;
+  }catch{return 0}
 }
 function fmtN(n){return n?n.toLocaleString('en-IN',{maximumFractionDigits:2}):'';}
 
 function updateInvRow(ri,col,val){
   invRows[ri][col]=val;
   const visCols=invCols.filter(c=>c.visible);
+  const resolved=resolveRow(invRows[ri]);
   const rows=document.getElementById('inv-tbody').querySelectorAll('tr');
   if(rows[ri]){
     const cells=rows[ri].querySelectorAll('td');
-    let ci=0;
     visCols.forEach((c,i)=>{
       if(c.type==='formula'){
-        const v=calcFormula(c.formula,invRows[ri]);
+        const v=parseFloat(resolved[c.id])||0;
         if(cells[i])cells[i].textContent=v?fmtN(v):'';
       }
     });
@@ -1076,9 +1096,9 @@ function updateInvRow(ri,col,val){
 }
 
 function calcInvTotals(){
-  const amtCol=invCols.find(c=>c.id==='amount')||invCols.find(c=>c.type==='formula');
+  const amtCol=invCols.find(c=>c.id==='amount')||invCols.slice().reverse().find(c=>c.type==='formula');
   let total=0;
-  if(amtCol)invRows.forEach(r=>{total+=calcFormula(amtCol.formula,r);});
+  if(amtCol)invRows.forEach(r=>{const resolved=resolveRow(r);total+=parseFloat(resolved[amtCol.id])||0;});
   const adv=parseFloat(document.getElementById('inv-advance').value)||0;
   document.getElementById('inv-total-show').textContent='₹'+Math.round(total).toLocaleString('en-IN');
   document.getElementById('inv-adv-show').textContent='₹'+adv.toLocaleString('en-IN');
@@ -1155,10 +1175,10 @@ function printInvoice(){
   const client=DB.clients().find(c=>c.id==clientId)||{};
   const s=DB.settings();const total=calcInvTotals();const adv=parseFloat(document.getElementById('inv-advance').value)||0;
   const visCols=invCols.filter(c=>c.visible);const qr=DB.qr();
-  const rows=invRows.map(row=>`<tr>${visCols.map(col=>{
-    if(col.type==='formula'){const v=calcFormula(col.formula,row);return `<td style="text-align:right">${v?'₹'+fmtN(v):''}</td>`;}
+  const rows=invRows.map(row=>{const resolved=resolveRow(row);return `<tr>${visCols.map(col=>{
+    if(col.type==='formula'){const v=parseFloat(resolved[col.id])||0;return `<td style="text-align:right">${v?'₹'+fmtN(v):''}</td>`;}
     return `<td>${row[col.id]||''}</td>`;
-  }).join('')}</tr>`).join('');
+  }).join('')}</tr>`;}).join('');
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>${docTypeEditing==='invoice'?'Invoice':'Quotation'} #${document.getElementById('inv-number').value}</title>
   <style>
