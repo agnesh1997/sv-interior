@@ -1068,6 +1068,20 @@ function resolveRow(row){
   }
   return vals;
 }
+function function resolveRow(row){
+  const vals={...row};
+  if(typeof invCols!=='undefined'){
+    invCols.forEach(col=>{
+      if(col.type==='formula'&&col.formula){
+        try{
+          const f=col.formula.replace(/[a-zA-Z_][a-zA-Z0-9_]*/g,m=>parseFloat(vals[m])||0);
+          vals[col.id]=eval(f)||0;
+        }catch{vals[col.id]=0;}
+      }
+    });
+  }
+  return vals;
+}
 function calcFormula(formula,row){
   if(!formula)return 0;
   try{
@@ -1075,6 +1089,7 @@ function calcFormula(formula,row){
     const f=formula.replace(/[a-zA-Z_][a-zA-Z0-9_]*/g,m=>parseFloat(vals[m])||0);
     return eval(f)||0;
   }catch{return 0}
+}
 }
 function fmtN(n){return n?n.toLocaleString('en-IN',{maximumFractionDigits:2}):'';}
 
